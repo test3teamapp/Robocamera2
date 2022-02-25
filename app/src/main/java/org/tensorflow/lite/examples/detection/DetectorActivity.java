@@ -49,15 +49,15 @@ import com.google.mlkit.vision.face.FaceDetector;
 import com.google.mlkit.vision.face.FaceDetectorOptions;
 
 import java.io.IOException;
+import java.util.ArrayList;
 import java.util.LinkedList;
 import java.util.List;
 import org.tensorflow.lite.examples.detection.customview.OverlayView;
 import org.tensorflow.lite.examples.detection.customview.OverlayView.DrawCallback;
-import org.tensorflow.lite.examples.detection.env.BitmapDataObject;
 import org.tensorflow.lite.examples.detection.env.BorderedText;
 import org.tensorflow.lite.examples.detection.env.ImageUtils;
 import org.tensorflow.lite.examples.detection.env.Logger;
-import org.tensorflow.lite.examples.detection.env.StorageHandler;
+import org.tensorflow.lite.examples.detection.speech.SpeechHandler;
 import org.tensorflow.lite.examples.detection.tflite.SimilarityClassifier;
 import org.tensorflow.lite.examples.detection.tflite.TFLiteObjectDetectionAPIModel;
 import org.tensorflow.lite.examples.detection.tracking.MultiBoxTracker;
@@ -131,6 +131,15 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
   private FloatingActionButton fabAdd;
 
   //private HashMap<String, Classifier.Recognition> knownFaces = new HashMap<>();
+
+  public static List<DetectionListener> listeners;
+
+  public static void addListener(DetectionListener toAdd) {
+    if (listeners == null){
+      listeners = new ArrayList<DetectionListener>();
+    }
+    listeners.add(toAdd);
+  }
 
 
   @Override
@@ -282,7 +291,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
     }
     computingDetection = true;
 
-    LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
+    //LOGGER.i("Preparing image " + currTimestamp + " for detection in bg thread.");
 
     rgbFrameBitmap.setPixels(getRgbBytes(), 0, previewWidth, 0, 0, previewWidth, previewHeight);
 
@@ -424,7 +433,7 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
 
     if (mappedRecognitions.size() > 0) {
-       LOGGER.i("Adding results");
+       //LOGGER.i("Adding results");
        SimilarityClassifier.Recognition rec = mappedRecognitions.get(0);
        if (rec.getExtra() != null) {
          showAddFaceDialog(rec);
@@ -488,8 +497,8 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
 
     for (Face face : faces) {
 
-      LOGGER.i("FACE" + face.toString());
-      LOGGER.i("Running detection on face " + currTimestamp);
+      //LOGGER.i("FACE" + face.toString());
+      //LOGGER.i("Running detection on face " + currTimestamp);
       //results = detector.recognizeImage(croppedBitmap);
 
       final RectF boundingBox = new RectF(face.getBoundingBox());
@@ -585,6 +594,11 @@ public class DetectorActivity extends CameraActivity implements OnImageAvailable
         result.setCrop(crop);
         mappedRecognitions.add(result);
 
+        // TODO: CHECK BASED ON --- CONDITIONS --- WHETHER TO DO SOMETHING WITH THE IDENTIFIED FACE
+
+        // Notify everybody that may be interested.
+        for (DetectionListener dl : listeners)
+          dl.detectorFoundAFace(result);
       }
 
 

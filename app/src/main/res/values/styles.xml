@@ -8,4 +8,13 @@
         <item name="colorAccent">@color/tfe_color_accent</item>
     </style>
 
+    <style name="Widget.AppTheme.ObjectDetection.ActionBar.Fullscreen" parent="Widget.AppCompat.ActionBar">
+        <item name="android:background">@color/black_overlay</item>
+    </style>
+
+    <style name="Widget.AppTheme.ObjectDetection.ButtonBar.Fullscreen" parent="">
+        <item name="android:background">@color/black_overlay</item>
+        <item name="android:buttonBarStyle">?android:attr/buttonBarStyle</item>
+    </style>
+
 </resources>
