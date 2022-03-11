@@ -7,11 +7,14 @@ import android.content.Context;
 
 import android.util.Log;
 
+import org.tensorflow.lite.examples.detection.DetectionListener;
 import org.tensorflow.lite.examples.detection.env.Logger;
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.UUID;
 
 public class BluetoothHandler {
@@ -32,6 +35,7 @@ public class BluetoothHandler {
     private static BluetoothHandler singleObject = null;
     private Context context;
 
+    public static List<BluetoothListener> listeners;
 
     private BluetoothHandler(Context context) {
         this.context = context;
@@ -65,9 +69,15 @@ public class BluetoothHandler {
     }
 
 
+    public static void addListener(BluetoothListener toAdd) {
+        if (listeners == null){
+            listeners = new ArrayList<BluetoothListener>();
+        }
+        listeners.add(toAdd);
+    }
 
     /* ============================ Thread to Create Bluetooth Connection =================================== */
-    public static class CreateConnectThread extends Thread {
+    private static class CreateConnectThread extends Thread {
 
         private final String TAG = "CreateConnectThread";
 
@@ -121,7 +131,7 @@ public class BluetoothHandler {
             // the connection in a separate thread.
             connectedThread = new ConnectedThread(mmSocket);
             connectedThread.run();
-            connectedThread.initialMotorTest();
+
         }
 
         // Closes the client socket and causes the thread to finish.
@@ -135,7 +145,7 @@ public class BluetoothHandler {
     }
 
     /* =============================== Thread for Data Transfer =========================================== */
-    public static class ConnectedThread extends Thread {
+    private static class ConnectedThread extends Thread {
 
         private final String TAG = "ConnectedThread";
 
@@ -174,7 +184,10 @@ public class BluetoothHandler {
                     if (buffer[bytes] == '\n'){
                         readMessage = new String(buffer,0,bytes);
                         Log.i(TAG,"Arduino Message received : " + readMessage);
-
+                        // notify all listeners
+                        for(BluetoothListener bll: listeners){
+                            bll.messageReceivedFromBluetooth(readMessage);
+                        }
                         bytes = 0;
                     } else {
                         bytes++;

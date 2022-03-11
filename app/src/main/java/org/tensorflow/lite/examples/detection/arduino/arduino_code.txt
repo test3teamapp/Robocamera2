@@ -10,18 +10,26 @@ NewPing sonar(TRIGGER_PIN, ECHO_PIN, MAX_DISTANCE); // NewPing setup of pins and
 
 unsigned int pingSpeed = 200; // How frequently are we going to send out a ping (in milliseconds). 50ms would be 20 times a second.
 unsigned long pingTimer;     // Holds the next ping time.
+
+
+//knock sensor - bumber infront of car
+#define KNOCK_SENSOR_ANALOG_PIN  A0 // the piezo is connected to analog pin 0
+const int KNOCK_SENSOR_threshold = 50;  // threshold value to decide when the detected sound is a knock or not
+int KNOCK_SENSOR_reading = 0;      // variable to store the value read from the sensor pin
 boolean isObjactleAhead = false;
+unsigned long KNOCK_MOVE_BACK_timer = 0;     // Holds the time we are backing up from an obstacle
+
 //bt
 SoftwareSerial btm(2, 3); // rx tx
 int index = 0;
 char data[10];
-char command = 'S';
-char prevCommand = 'S';
-int velocity = 200; //NOT WORKING
-boolean isStoped = true;
+String command = "dummy";
+String prevCommand = "prevDummy";
+int velocity = 100;
+boolean isAllStoped = true;
 
 //pin for servo
-#define SERVO_PIN  9
+#define SERVO_PIN  10
 Servo servo;
 int pointFW = 85;
 int pointLEFT = 175;
@@ -36,14 +44,14 @@ bool isSonarPingReceived = true; // to start the initial process
 int sonarPingsSentAtSpecificAngle = 0;
 
 // pins for motors
-int motor1pin1 = 5;
-int motor1pin2 = 6;
+int motor1pin1 = 4;
+int motor1pin2 = 7;
 
-int motor2pin1 = 8;
-int motor2pin2 = 7;
+int motor2pin1 = 9;
+int motor2pin2 = 8;
 
-//int motor1Speed = 0; // not used
-//int motor2Speed = 0; // not used
+int motor1Speed = 5; // not used
+int motor2Speed = 6; // not used
 
 int sonarIterations = 5;
 
@@ -58,8 +66,8 @@ void setup() {
   pinMode(motor1pin2, OUTPUT);
   pinMode(motor2pin1, OUTPUT);
   pinMode(motor2pin2, OUTPUT);
-  //pinMode(motor1Speed, OUTPUT);
-  //pinMode(motor2Speed, OUTPUT);
+  pinMode(motor1Speed, OUTPUT);
+  pinMode(motor2Speed, OUTPUT);
 
   // for sonar
   pingTimer = millis(); // Start now.
@@ -72,144 +80,204 @@ void setup() {
 void loop() {
   //delay(500);
 
-  // Notice how there's no delays in this sketch to allow you to do other processing in-line while doing distance pings.
-  if (millis() >= pingTimer) {   // pingSpeed milliseconds since last ping, do another ping.
-
-    if (isSonarPingReceived || (sonarPingsSentAtSpecificAngle > 2)) { // change the angle to get a new ping reading if previous ping result is received
-      sonarPingsSentAtSpecificAngle = 0;
-      if (servoAngleIncrease) {
-        if (servoAngle < 180) {
-          servoAngle = servoAngle + servoAngleStep;
-        } else {
-          servoAngleIncrease = false;
-        }
-      } else {
-        if (servoAngle > 0) {
-          servoAngle = servoAngle - servoAngleStep;
-        } else {
-          servoAngleIncrease = true;
-        }
-      }
-      servo.write(servoAngle);
+  // if we have identified an obstacle, we are backing up.
+  if (isObjactleAhead) {
+    // back up for 1/2 seconds
+    if (millis() - KNOCK_MOVE_BACK_timer < 500) {
+      Back_4W();
+    } else {
+      isObjactleAhead  = false;
+      KNOCK_MOVE_BACK_timer = 0;
     }
-
-    pingTimer += pingSpeed;      // Set the next ping time.
-    sonar.ping_timer(echoCheck); // Send out the ping, calls "echoCheck" function every 24uS where you can check the ping status.
-    isSonarPingReceived = false;
-    sonarPingsSentAtSpecificAngle++;
-    Serial.print("Send ping @ angle : ");
-    Serial.print(servoAngle);
-    Serial.print(" / ");
-
   }
+  if (isObjactleAhead) {
+    return; // skip anything else and continue moving backwards to avoid objstacle // TODO
+  }
+  KNOCK_SENSOR_reading = analogRead(KNOCK_SENSOR_ANALOG_PIN);
+  // if the sensor reading is greater than the threshold:
+  if (KNOCK_SENSOR_reading >= KNOCK_SENSOR_threshold) {
+    //isObjactleAhead  = true; // DEBUG
+    KNOCK_MOVE_BACK_timer = millis();
+  }
+
+  scanWithSonarFW();
+
+  // receiving BT commands should be active even if isAllStopped is true, to receive the next command
   if (btm.available() > 0)
   {
-    command = btm.read();
+    command = btm.readString();
 
     //Change pin mode only if new command is different from previous.
     if (command != prevCommand) {
-      Serial.write(command);
+      Serial.print(command);
       //Serial.write(" / v=");
       //Serial.write(velocity);
       Serial.println();
       prevCommand = command;
     }
+
+    processCommand(command);
+  }
+}
+
+void processCommand(String command) {
+  if (command == "F") {
+    Forward_4W();
+    isAllStoped = false;
+  } else if (command == "B") {
+    Back_4W();
+    // backing up could be triggered by objstacle avoidance, so...
+    if (!isObjactleAhead) {
+      isAllStoped = false;
+    }
+  } else if (command == "L") {
+    Left_4W();
+    isAllStoped = false;
+  } else if (command == "R") {
+    Right_4W();
+    isAllStoped = false;
+  } else if (command == "S") {
+    Stopped_4W();
+    isAllStoped = false;
+  } else if (command == "D") {
+
+    //Everything OFF
+    //digitalWrite(pinfrontLights, LOW);
+    //digitalWrite(pinbackLights, LOW);
+    Stopped_4W();
+    isAllStoped = true; //
+  } else if (command == "SCAN") {
+
+    //Everything OFF
+    Stopped_4W();
+    isAllStoped = true;
+    // scan with sonar 180degrees in fron of vehicle to determine next move
+    scanWithSonar180();
+  } else {
+    //Get velocity
+    velocity = 100;
+
+    if (command == "q")  {
+      velocity = 255;  //Full velocity
+    }
+    else {
+      //Chars '0' - '9' have an integer equivalence of 48 - 57, accordingly.
+      if (command == "0")  velocity = 0;
+      if (command == "1")  velocity = 25;
+      if (command == "2")  velocity = 50;
+      if (command == "3")  velocity = 75;
+      if (command == "4")  velocity = 100;
+      if (command == "5")  velocity = 125;
+      if (command == "6")  velocity = 150;
+      if (command == "7")  velocity = 175;
+      if (command == "8")  velocity = 200;
+      if (command == "9")  velocity = 225;
+
+    }
+    if (velocity != 100) {
+      Serial.write("-- velocity adjustment --");
+      Serial.print(command);
+      Serial.write(" / v=");
+      Serial.print(velocity);
+      Serial.println();
+    }
+
+  }
+}
+
+// SPECIAL Sonar scan with the servo doing a 180 degree travel.
+// Normally car should be stopped.
+// The sonar scan happens in this blocking function. Not with using interupt ("echoCheck")
+void scanWithSonar180() {
+
+  servoAngle = 0;
+  servo.write(servoAngle);
+  delay(500);
+
+  while (servoAngle <= 180) {
+    Serial.print("Send ping @ angle : ");
+    Serial.print(servoAngle);
+    Serial.print(" / ");
+    Serial.print(sonar.ping_cm()); // Send ping, get distance in cm and print result (0 = outside set distance range)
+    Serial.println("cm");
+    delay(50);
+    servoAngle = servoAngle + servoAngleStep;
+    servo.write(servoAngle);
+    delay(500);
   }
 
-  switch (command) {
-    case 'F':
-      Forward_4W(velocity);
-      break;
-    case 'B':
-      Back_4W(velocity);
-      break;
-    case 'L':
-      Left_4W();
-      break;
-    case 'R':
-      Right_4W();
-      break;
-    case 'S':
-      Stopped_4W();
-      break;
-    case 'I':  //FR
-      ForwardRight_4W(velocity);
-      break;
-    case 'J':  //BR
-      BackRight_4W(velocity);
-      break;
-    case 'G':  //FL
-      ForwardLeft_4W(velocity);
-      break;
-    case 'H':  //BL
-      BackLeft_4W(velocity);
-      break;
-    case 'W':  //Font ON
-      //digitalWrite(pinfrontLights, HIGH);
-      break;
-    case 'w':  //Font OFF
-      //digitalWrite(pinfrontLights, LOW);
-      break;
-    case 'U':  //Back ON
-      //digitalWrite(pinbackLights, HIGH);
-      break;
-    case 'u':  //Back OFF
-      //digitalWrite(pinbackLights, LOW);
-      break;
-    case 'D':  //Everything OFF
-      //digitalWrite(pinfrontLights, LOW);
-      //digitalWrite(pinbackLights, LOW);
-      Stopped_4W();
-      break;
-    default:  //Get velocity
-      velocity = 100;
-      /*
-        if (command == 'q') {
-        velocity = 255;  //Full velocity
-        }
-        else {
-        //Chars '0' - '9' have an integer equivalence of 48 - 57, accordingly.
-        if ((command >= 48) && (command <= 57)) {
-          //Subtracting 48 changes the range from 48-57 to 0-9.
-          //Multiplying by 25 changes the range from 0-9 to 0-225.
-          velocity = (command - 48) * 25;
-        }
-        }
-        Serial.write("-- velocity adjustment --");
-        Serial.write(command);
-        Serial.write(" / v=");
-        Serial.write(velocity);
-        Serial.println();
-      */
+  servoAngle = 180;
+  servo.write(servoAngle);
+
+  while (servoAngle >= 0) {
+    Serial.print("Send ping @ angle : ");
+    Serial.print(servoAngle);
+    Serial.print(" / ");
+    Serial.print(sonar.ping_cm()); // Send ping, get distance in cm and print result (0 = outside set distance range)
+    Serial.println("cm");
+    sonar.ping_cm();
+    delay(50);
+    servoAngle = servoAngle - servoAngleStep;
+    servo.write(servoAngle);
+    delay(500);
+  }
+
+  // return to normal fron facing position
+  servoAngle = pointFW;
+  servo.write(servoAngle);
+
+}
+
+// REGULAR Sonar scan with the servo at the FW position
+void scanWithSonarFW() {
+
+  if (!isAllStoped) {
+    // skip regular Sonar  if everythning is stopped
+
+    if (servoAngle != pointFW) {
+      servoAngle = pointFW;
+      servo.write(servoAngle);
+    }
+    // Notice how there's no delays in this sketch to allow you to do other processing in-line while doing distance pings.
+    if (millis() >= pingTimer) {   // pingSpeed milliseconds since last ping, do another ping.
+
+      pingTimer += pingSpeed;      // Set the next ping time.
+      sonar.ping_timer(echoCheck); // Send out the ping, calls "echoCheck" function every 24uS where you can check the ping status.
+      isSonarPingReceived = false;
+      Serial.print("Send ping @ angle : ");
+      Serial.print(servoAngle);
+      Serial.print(" / ");
+
+    }
   }
 }
 
 void echoCheck() { // Timer2 interrupt calls this function every 24uS where you can check the ping status.
   // Don't do anything here!
+  if (isAllStoped) return; // No sonar is used when isAllStopped is true
   if (sonar.check_timer()) { // This is how you check to see if the ping was received.
     // Here's where you can add code.
     isSonarPingReceived = true;
-    sonarPingsSentAtSpecificAngle = 0;
     Serial.print("Ping @ angle ");
     Serial.print(servoAngle);
     Serial.print(" : ");
     Serial.print(sonar.ping_result / US_ROUNDTRIP_CM); // Ping returned, uS result in ping_result, convert to cm with US_ROUNDTRIP_CM.
     Serial.println("cm");
     if ((sonar.ping_result / US_ROUNDTRIP_CM) < 20 && (sonar.ping_result / US_ROUNDTRIP_CM) != 0) {
-      isObjactleAhead = true;
+      //TODO
     }
   }
   // Don't do anything here!
 }
 
-void Forward_4W(int velocity) {
+void Forward_4W() {
 
-  Serial.write("Forward_4W");
-  Serial.println();
+  //Serial.write("Forward_4W");
+  //Serial.println();
 
   //Controlling speed (0 = off and 255 = max speed):
-  //analogWrite(motor1Speed, velocity); //ENA pin
-  //analogWrite(motor2Speed, velocity); //ENB pin
+  analogWrite(motor1Speed, velocity); //ENA pin
+  analogWrite(motor2Speed, velocity); //ENB pin
 
   digitalWrite(motor1pin1, LOW);
   digitalWrite(motor1pin2, HIGH);
@@ -218,11 +286,11 @@ void Forward_4W(int velocity) {
   digitalWrite(motor2pin2, HIGH);
 }
 
-void Back_4W(int velocity) {
+void Back_4W() {
 
   //Controlling speed (0 = off and 255 = max speed):
-  //analogWrite(motor1Speed, velocity); //ENA pin
-  //analogWrite(motor2Speed, velocity); //ENB pin
+  analogWrite(motor1Speed, velocity); //ENA pin
+  analogWrite(motor2Speed, velocity); //ENB pin
 
   digitalWrite(motor1pin1, HIGH);
   digitalWrite(motor1pin2, LOW);
@@ -234,8 +302,8 @@ void Back_4W(int velocity) {
 void Left_4W() {
 
   //Controlling speed (0 = off and 255 = max speed):
-  // analogWrite(motor1Speed, 0); //ENA pin
-  // analogWrite(motor2Speed, 100); //ENB pin
+  analogWrite(motor1Speed, 100); //ENA pin
+  analogWrite(motor2Speed, 0); //ENB pin
 
   digitalWrite(motor1pin1, LOW);
   digitalWrite(motor1pin2, HIGH);
@@ -247,8 +315,8 @@ void Left_4W() {
 void Right_4W() {
 
   //Controlling speed (0 = off and 255 = max speed):
-  // analogWrite(motor1Speed, 100); //ENA pin
-  // analogWrite(motor2Speed, 0); //ENB pin
+  analogWrite(motor1Speed, 0); //ENA pin
+  analogWrite(motor2Speed, 100); //ENB pin
 
   digitalWrite(motor1pin1, LOW);
   digitalWrite(motor1pin2, LOW);
@@ -260,8 +328,8 @@ void Right_4W() {
 void Stopped_4W() {
 
   //Controlling speed (0 = off and 255 = max speed):
-  // analogWrite(motor1Speed, 0); //ENA pin
-  // analogWrite(motor2Speed, 0); //ENB pin
+  analogWrite(motor1Speed, 0); //ENA pin
+  analogWrite(motor2Speed, 0); //ENB pin
 
   digitalWrite(motor1pin1, LOW);
   digitalWrite(motor1pin2, LOW);
@@ -270,10 +338,10 @@ void Stopped_4W() {
   digitalWrite(motor2pin2, LOW);
 }
 
-void ForwardRight_4W(int velocity) {
+void ForwardRight_4W() {
 
   //  //Controlling speed (0 = off and 255 = max speed):
-  //  analogWrite(motor1Speed, velocity); //ENA pin
+  //  analogWrite(motor1Speed, velocity); //ENA pin.
   //  analogWrite(motor2Speed, velocity / 2); //ENB pin
   //
   //  digitalWrite(motor1pin1, HIGH);
@@ -283,14 +351,14 @@ void ForwardRight_4W(int velocity) {
   //  digitalWrite(motor2pin2, LOW);
 }
 
-void BackRight_4W(int velocity) {
+void BackRight_4W() {
 
 }
 
-void ForwardLeft_4W(int velocity) {
+void ForwardLeft_4W() {
 
 }
 
-void BackLeft_4W(int velocity) {
+void BackLeft_4W() {
 
 }

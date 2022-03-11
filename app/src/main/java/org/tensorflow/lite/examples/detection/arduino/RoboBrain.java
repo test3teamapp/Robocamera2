@@ -10,12 +10,11 @@ import org.tensorflow.lite.examples.detection.DetectionListener;
 import org.tensorflow.lite.examples.detection.DetectorActivity;
 import org.tensorflow.lite.examples.detection.env.Logger;
 import org.tensorflow.lite.examples.detection.env.StorageHandler;
+import org.tensorflow.lite.examples.detection.speech.ListeningHandler;
 import org.tensorflow.lite.examples.detection.speech.SpeechHandler;
 import org.tensorflow.lite.examples.detection.tflite.SimilarityClassifier;
 
-import java.util.HashMap;
-
-public class RoboBrain implements DetectionListener {
+public class RoboBrain implements DetectionListener, BluetoothListener {
 
     private static final Logger LOGGER = new Logger();
     private String TAG = "RoboBrain";
@@ -23,7 +22,7 @@ public class RoboBrain implements DetectionListener {
     private Context context;
 
     private String personToLookForString = "";
-    private String findOrFollowCommandString = "";
+    private String spokenCommandString = "";
     private boolean shouldFindOrFollow = false;
 
     private RoboBrain(Context context) {
@@ -40,47 +39,38 @@ public class RoboBrain implements DetectionListener {
     }
 
     /**
-     *
      * @return StorageHandler COULD RETURN NULL
      */
     public static RoboBrain getSingleObject() {
         return singleObject;
     }
 
-    @Override
-    public void detectorFoundAFace(SimilarityClassifier.Recognition result) {
-        // WITH OLDER PHONES CAMERA SHOULD BE PAUSED FOR THE TTS TO WORK DUE TO CPU POWER
 
-        if (result.getTitle().compareTo(this.personToLookForString) == 0){
-            // we found what we were looking for
-            // close the camera activity
-            Intent intent = new Intent(CameraActivity.CAMERA_ACTIVITY_BROADCAST_MESSAGE_FINNISH_CAMERA);
-            context.sendBroadcast(intent);
-            SpeechHandler.getSingleObject().speak("I found you " + result.getTitle() + "! ");
-        }
-
-    }
-
-
-    private void resetTrackingData(){
+    private void resetTrackingData() {
         personToLookForString = "";
-        findOrFollowCommandString = "";
+        spokenCommandString = "";
         shouldFindOrFollow = false;
     }
 
-    public void processAudioCommand(String audioTranscript){
+    public void processAudioCommand(String audioTranscript) {
 
         boolean needToStartCamera = false;
         resetTrackingData();
 
         if (audioTranscript.contains("find")) {
-            findOrFollowCommandString = "find";
+            spokenCommandString = "find";
             shouldFindOrFollow = true;
             needToStartCamera = true;
         } else if (audioTranscript.contains("follow")) {
-            findOrFollowCommandString = "follow";
+            spokenCommandString = "follow";
             shouldFindOrFollow = true;
             needToStartCamera = true;
+        } else if (audioTranscript.contains("drive") || audioTranscript.contains("Drive")) {
+            spokenCommandString = "drive";
+        } else if (audioTranscript.contains("stop") || audioTranscript.contains("Stop")) {
+            spokenCommandString = "stop";
+        } else if (audioTranscript.contains("scan") || audioTranscript.contains("Scan")) {
+            spokenCommandString = "scan";
         }
         if (shouldFindOrFollow) {
             if (StorageHandler.getSingleObject().getRegisteredFaces().keySet() != null &&
@@ -91,7 +81,7 @@ public class RoboBrain implements DetectionListener {
                 // we set a threashold of 3.
                 // match a name.
                 // TODO NOT VERY SMART MATCHING. THE NAME MUST BE AFTER THE VERB "FIND" or "FOLLOW"
-                String currentNameFromListeningResults = audioTranscript.split(findOrFollowCommandString)[1];
+                String currentNameFromListeningResults = audioTranscript.split(spokenCommandString)[1];
                 for (String name : StorageHandler.getSingleObject().getRegisteredFaces().keySet()) {
                     if (StringUtils.getLevenshteinDistance(name, currentNameFromListeningResults) < bestScore) {
                         bestScore = StringUtils.getLevenshteinDistance(name, currentNameFromListeningResults);
@@ -100,12 +90,48 @@ public class RoboBrain implements DetectionListener {
                 }
             }
         }
-        if (shouldFindOrFollow) {
-            Log.i(TAG, "onResults - I was ordered to : '" + findOrFollowCommandString + "' '" + personToLookForString + "'");
-        }
-        if (needToStartCamera){
+
+        Log.i(TAG, "onResults - I was ordered to : '" + spokenCommandString + "' '" + personToLookForString + "'");
+
+        if (needToStartCamera) {
             Intent intent = new Intent(context, DetectorActivity.class);
             context.startActivity(intent);
         }
+
+        if (spokenCommandString.equals("drive")) {
+            //TODO
+            BluetoothHandler.getSingleObject().sendToArduino(BTCOMMAND_FW);
+        }
+        if (spokenCommandString.equals("stop")) {
+            //TODO
+            BluetoothHandler.getSingleObject().sendToArduino(BTCOMMAND_STOPALL);
+        }
+        if (spokenCommandString.equals("scan")) {
+            //TODO
+            BluetoothHandler.getSingleObject().sendToArduino(BTCOMMAND_SONARSCAN);
+        }
+
+
+        // start listening -- Next command could be e.g. STOP
+        ListeningHandler.getSingleObject().startListening();
+    }
+
+    @Override
+    public void detectorFoundAFace(SimilarityClassifier.Recognition result) {
+        // WITH OLDER PHONES CAMERA SHOULD BE PAUSED FOR THE TTS TO WORK DUE TO CPU POWER
+
+        if (result.getTitle().compareTo(this.personToLookForString) == 0) {
+            // we found what we were looking for
+            // close the camera activity
+            Intent intent = new Intent(CameraActivity.CAMERA_ACTIVITY_BROADCAST_MESSAGE_FINNISH_CAMERA);
+            context.sendBroadcast(intent);
+            SpeechHandler.getSingleObject().speak("I found you " + result.getTitle() + "! ");
+        }
+    }
+
+
+    @Override
+    public void messageReceivedFromBluetooth(String msg) {
+
     }
 }
