@@ -1,0 +1,67 @@
+Sonar data format (arduino to android)
+
+{
+  "sensor": "sonar",
+  "time": 1351824120,
+  "range": "270-90 degrees",
+  "step": "10",
+  "scale": "cm",
+  "data": [
+    48,
+    2,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3,
+    48.7,
+    2.3
+  ]
+}
+
+arduinojson.org/assistant
+
+arduino code :
+
+StaticJsonDocument<256> doc;
+
+doc["sensor"] = "sonar";
+doc["time"] = 1351824120;
+doc["range"] = "270-90 degrees";
+doc["step"] = "10";
+doc["scale"] = "cm";
+
+JsonArray data = doc.createNestedArray("data");
+data.add(48);
+data.add(2);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+data.add(48.7);
+data.add(2.3);
+
+serializeJson(doc, output);

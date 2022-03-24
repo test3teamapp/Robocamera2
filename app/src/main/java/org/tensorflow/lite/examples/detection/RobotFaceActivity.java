@@ -201,6 +201,7 @@ public class RobotFaceActivity extends AppCompatActivity implements  SpeechEvent
         delayedHide(100);
     }
 
+
     @Override
     protected void onDestroy() {
         super.onDestroy();

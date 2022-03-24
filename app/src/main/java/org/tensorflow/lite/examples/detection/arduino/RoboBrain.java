@@ -28,6 +28,7 @@ public class RoboBrain implements DetectionListener, BluetoothListener {
     private RoboBrain(Context context) {
         this.context = context;
         DetectorActivity.addListener(this);
+        BluetoothHandler.addListener(this);
 
     }
 
@@ -71,6 +72,8 @@ public class RoboBrain implements DetectionListener, BluetoothListener {
             spokenCommandString = "stop";
         } else if (audioTranscript.contains("scan") || audioTranscript.contains("Scan")) {
             spokenCommandString = "scan";
+        } else if (audioTranscript.contains("test") || audioTranscript.contains("Test")) {
+            spokenCommandString = "test";
         }
         if (shouldFindOrFollow) {
             if (StorageHandler.getSingleObject().getRegisteredFaces().keySet() != null &&
@@ -110,6 +113,10 @@ public class RoboBrain implements DetectionListener, BluetoothListener {
             //TODO
             BluetoothHandler.getSingleObject().sendToArduino(BTCOMMAND_SONARSCAN);
         }
+        if (spokenCommandString.equals("test")) {
+            //TODO
+            BluetoothHandler.getSingleObject().initialMotorTest();
+        }
 
 
         // start listening -- Next command could be e.g. STOP
@@ -119,6 +126,7 @@ public class RoboBrain implements DetectionListener, BluetoothListener {
     @Override
     public void detectorFoundAFace(SimilarityClassifier.Recognition result) {
         // WITH OLDER PHONES CAMERA SHOULD BE PAUSED FOR THE TTS TO WORK DUE TO CPU POWER
+
 
         if (result.getTitle().compareTo(this.personToLookForString) == 0) {
             // we found what we were looking for

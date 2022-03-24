@@ -48,7 +48,7 @@ public class BluetoothHandler {
             selected device (see the thread code below)
              */
         BluetoothAdapter bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        createConnectThread = new CreateConnectThread(bluetoothAdapter,deviceAddress);
+        createConnectThread = new CreateConnectThread(bluetoothAdapter, deviceAddress);
         createConnectThread.start();
 
     }
@@ -61,7 +61,6 @@ public class BluetoothHandler {
     }
 
     /**
-     *
      * @return StorageHandler COULD RETURN NULL
      */
     public static BluetoothHandler getSingleObject() {
@@ -70,7 +69,7 @@ public class BluetoothHandler {
 
 
     public static void addListener(BluetoothListener toAdd) {
-        if (listeners == null){
+        if (listeners == null) {
             listeners = new ArrayList<BluetoothListener>();
         }
         listeners.add(toAdd);
@@ -163,7 +162,8 @@ public class BluetoothHandler {
             try {
                 tmpIn = socket.getInputStream();
                 tmpOut = socket.getOutputStream();
-            } catch (IOException e) { }
+            } catch (IOException e) {
+            }
 
             mmInStream = tmpIn;
             mmOutStream = tmpOut;
@@ -179,20 +179,42 @@ public class BluetoothHandler {
                     Read from the InputStream from Arduino until termination character is reached.
                     Then send the whole String message to GUI Handler.
                      */
+                    bytes = mmInStream.read(buffer);
+                    String readMessage;
+                    if (bytes > 0) {
+                        readMessage = new String(buffer, 0, bytes);
+                        Log.i(TAG, "Arduino Message received : " + readMessage);
+                        // notify all listeners
+                        for (BluetoothListener bll : listeners) {
+                            if (bll != null) {
+                                bll.messageReceivedFromBluetooth(readMessage);
+                            }
+                        }
+                        bytes = 0;
+                    }
+
+                    /*
                     buffer[bytes] = (byte) mmInStream.read();
                     String readMessage;
-                    if (buffer[bytes] == '\n'){
-                        readMessage = new String(buffer,0,bytes);
-                        Log.i(TAG,"Arduino Message received : " + readMessage);
+                    if (buffer[bytes] == '\n') {
+                        readMessage = new String(buffer, 0, bytes);
+                        Log.i(TAG, "Arduino Message received : " + readMessage);
                         // notify all listeners
-                        for(BluetoothListener bll: listeners){
-                            bll.messageReceivedFromBluetooth(readMessage);
+                        for (BluetoothListener bll : listeners) {
+                            if (bll != null) {
+                                bll.messageReceivedFromBluetooth(readMessage);
+                            }
                         }
                         bytes = 0;
                     } else {
                         bytes++;
                     }
+                    */
+
                 } catch (IOException e) {
+                    e.printStackTrace();
+                    break;
+                } catch (Exception e) {
                     e.printStackTrace();
                     break;
                 }
@@ -205,11 +227,11 @@ public class BluetoothHandler {
             try {
                 mmOutStream.write(bytes);
             } catch (IOException e) {
-                Log.e(TAG,"Unable to send message to arduino",e);
+                Log.e(TAG, "Unable to send message to arduino", e);
             }
         }
 
-        public void write(char input) {
+       /* public void write(char input) {
             byte[] bytes = new byte[1];
             bytes[0] = (byte) input; //converts entered char into bytes
             try {
@@ -217,27 +239,14 @@ public class BluetoothHandler {
             } catch (IOException e) {
                 Log.e(TAG,"Unable to send message to arduino",e);
             }
-        }
+        }*/
 
         /* Call this from the main activity to shutdown the connection */
         public void cancel() {
             try {
                 mmSocket.close();
-            } catch (IOException e) { }
-        }
-
-        public void initialMotorTest(){
-            write('F');
-            write('\n');
-            write('B');
-            write('\n');
-            write('L');
-            write('\n');
-            write('R');
-            write('\n');
-            write('S');
-            write('\n');
-
+            } catch (IOException e) {
+            }
         }
     }
 
@@ -245,14 +254,25 @@ public class BluetoothHandler {
 
     public void terminateConnection() {
         // Terminate Bluetooth Connection
-        if (createConnectThread != null){
+        if (createConnectThread != null) {
             createConnectThread.cancel();
         }
 
     }
 
-    public void sendToArduino(String msg){
+    public void sendToArduino(String msg) {
         // Send command to Arduino board
         connectedThread.write(msg);
+    }
+
+    public void initialMotorTest() {
+        connectedThread.write(BluetoothListener.BTCOMMAND_FW);
+        connectedThread.write(BluetoothListener.BTCOMMAND_BACK);
+        connectedThread.write(BluetoothListener.BTCOMMAND_RIGHT);
+        connectedThread.write(BluetoothListener.BTCOMMAND_LEFT);
+        connectedThread.write(BluetoothListener.BTCOMMAND_STOP);
+        connectedThread.write(BluetoothListener.BTCOMMAND_SONARSCAN);
+        connectedThread.write(BluetoothListener.BTCOMMAND_STOPALL);
+
     }
 }
